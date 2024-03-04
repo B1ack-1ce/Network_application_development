@@ -5,9 +5,9 @@ namespace Server
 {
     internal class Program
     {
-        static void Main(string[] args)
+        static async Task Main(string[] args)
         {
-            Server.StartAsync();
+            await Task.Run(() =>  Server.Start());
 
             Console.ReadKey();
         }

@@ -70,9 +70,16 @@ namespace Client
         {
             while (true)
             {
-                string? msg = await reader.ReadLineAsync();
-                Console.WriteLine("Получено сообщение");
-                Console.WriteLine(msg);
+                if (reader.BaseStream.CanRead)
+                {
+                    string? msg = await reader.ReadLineAsync();
+                    Console.WriteLine("Получено сообщение");
+                    Console.WriteLine(msg);
+                }
+                else
+                {
+                    await Console.Out.WriteLineAsync("Потеряно соединение с сервером");
+                }
             }
         }
     }

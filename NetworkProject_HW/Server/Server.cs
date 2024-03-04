@@ -17,23 +17,36 @@ namespace Server
         private static int count = 0;
         private static TcpListener tcpListener = new TcpListener(IPAddress.Any, 5050);
         private static ConcurrentDictionary<TcpClient, InfoAboutClient> tcpClients = new();
+        private static CancellationTokenSource cancellation = new CancellationTokenSource();
 
-        public static async Task StartAsync()
+        public static async Task Start()
         {
-            tcpListener.Start();
-            await Console.Out.WriteLineAsync($"Данные сервера: {tcpListener.LocalEndpoint}");
-            await Console.Out.WriteLineAsync("Ожидание подключения...");
+            Task.Run(StartServerAsync);
 
-            while (true)
+            await Task.Run(AwaitCancelToken);
+        }
+        private static async Task StartServerAsync()
+        {
+            try
             {
-                TcpClient tcpClient = await tcpListener.AcceptTcpClientAsync();
+                tcpListener.Start();
+                await Console.Out.WriteLineAsync($"Данные сервера: {tcpListener.LocalEndpoint}");
+                await Console.Out.WriteLineAsync("Ожидание подключения...");
 
-                await Console.Out.WriteLineAsync("Новое подключение");
-                //Запускаем отдельный поток для нового клиента без ожидания.
-                Task.Run(() => Chat(tcpClient));
+                while (true)
+                {
+                    TcpClient tcpClient = await tcpListener.AcceptTcpClientAsync();
+
+                    await Console.Out.WriteLineAsync("Новое подключение");
+                    //Запускаем отдельный поток для нового клиента без ожидания.
+                    Task.Run(() => Chat(tcpClient));
+                }
+            }
+            catch (Exception)
+            {
+                await Console.Out.WriteLineAsync("Сокеты закрыты");
             }
         }
-
         private static void Chat(TcpClient client)
         {
             Console.WriteLine($"Работаю в потоке {Thread.CurrentThread.ManagedThreadId}");
@@ -91,6 +104,44 @@ namespace Server
                     tcpClients[cl].Writer.Flush();
                 }
             }
+        }
+        private static async Task AwaitCancelToken()
+        {
+            try
+            {
+                while (true)
+                {
+                    if (!cancellation.IsCancellationRequested)
+                    {
+                        await Console.Out.WriteLineAsync("Введите exit для завершения работы сервера");
+                        string? command = await Console.In.ReadLineAsync();
+
+                        if (command.Equals("exit", StringComparison.OrdinalIgnoreCase))
+                        {
+                            string msg = "Сервер отключен.\nДо скорой встречи";
+
+                            foreach (var valuePair in tcpClients)
+                            {
+                                await valuePair.Value.Writer.WriteLineAsync(msg);
+                                valuePair.Value.Writer.Flush();
+                                valuePair.Key.Close();
+                            }
+                            cancellation.Cancel();
+                            tcpListener.Stop();
+                        }
+                    }
+                    else
+                    {
+                        cancellation.Token.ThrowIfCancellationRequested();
+                    }
+                }
+            }
+            catch (OperationCanceledException ex)
+            {
+                await Console.Out.WriteLineAsync(ex.Message);
+                await Console.Out.WriteLineAsync("Отключение сервера");
+            }
+            
         }
     }
 }
